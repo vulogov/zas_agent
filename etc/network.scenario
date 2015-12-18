@@ -1,0 +1,6 @@
+# Comment
+net.if.in[eth0]:{"min":0,"max":100000,"type":"int","variation_rnd":1,"spike_barrier":3,"spike_width":6}
+net.if.in[eth1]:{"min":0,"max":100000,"type":"int","variation_min":10,"variation_max":25}
+net.if.out[eth1]:{"min":0,"max":100000,"type":"int","variation_min":5,"variation_max":5}
+net.if.out[eth0]:{"min":0,"max":100000,"type":"int","variation_min":5,"variation_max":5,"spike_barrier":10,"spike_width":6}
+system.cpu.util[,,avg1]:{"min":0,"max":20,"type":"float","variation_min":10,"variation_max":10}

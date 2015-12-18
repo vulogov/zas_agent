@@ -12,6 +12,8 @@ import argparse
 import struct
 import multiprocessing
 import socket
+import time
+import logging
 
 ARGS=None
 SCENARIO=None
@@ -190,7 +192,7 @@ def handle(connection, address, scenario, args):
 class Server(object):
     def __init__(self, hostname, port, scenario, _args):
         import logging
-        self.logger = logging.getLogger("server")
+        self.logger = logging.getLogger("zas_server")
         self.hostname = hostname
         self.port = port
         self.scenario = scenario
@@ -213,13 +215,128 @@ class Server(object):
 
 
 ##
+## Feed the REDIS with pseudo-random stuff
+##
+def gen_ingest():
+    global ARGS
+    args = ARGS
+
+    import redis
+
+    ##
+    ## Calculate percentage
+    ##
+    def percentage(part, whole):
+        return 100 * float(part)/float(whole)
+    ##
+    ## Let's read ingestion scenario
+    ##
+    def parse_ingestion_scenario(fname):
+        import simplejson
+
+        logger = logging.getLogger("zas_ingestor")
+        if not os.path.exists(fname):
+            logger.error("Ingestion scenario file %s not exists"%fname)
+            return {}
+        f = open(fname)
+        scn = {}
+        lines = f.readlines()
+        for l in lines:
+            if l[0] in ["#", ";"]:
+                ## This is comment
+                continue
+            ix = l.index(":")
+            s_key,s_scn = l[:ix],l[ix+1:].strip()
+            try:
+                scn[s_key] = simplejson.loads(s_scn)
+            except:
+                continue
+        return scn
+    ##
+    ## Let's ingest single scenario
+    ##
+    def ingest_scenario(r, key, scn):
+        import numpy as np
+
+        def push_spike_to_redis(r, key, array):
+            k = "%s.spike"%key
+            for v in array:
+                r.rpush(k,v)
+        def return_res(scn, val):
+            if scn["type"] == "int":
+                return int(val)
+            return val
+
+        s_min = float(scn["min"])
+        s_max = float(scn["max"])
+        if r.llen("%s.spike"%key) > 0:
+            s_val = float(r.lpop("%s.spike"%key))
+            r.set(key,s_val)
+            return return_res(scn,s_val)
+        prev_val = r.get(key)
+        if prev_val == None:
+            prev_val = np.random.uniform(s_min,s_max)
+        else:
+            prev_val = float(prev_val)
+        ##
+        ## Throw the dice if there is a time for a spike
+        ##
+        if scn.has_key("spike_barrier") and scn.has_key("spike_width") and r.llen("%s.spike"%key) == 0:
+            s_barrier = float(scn["spike_barrier"])
+            dice = np.random.uniform(0,100)
+            if s_barrier > dice:
+                ## Spike !
+                spike_max = np.random.uniform(prev_val,s_max)
+                spike_min = np.random.uniform(spike_max, s_min)
+                h_width = int(scn["spike_width"])/2
+                h_plateu = int(np.random.uniform(1,h_width))
+                up = np.linspace(prev_val, spike_max, h_width)
+                plateu = np.random.gamma(spike_max, 0.95,h_plateu)
+                down = np.linspace(spike_max, spike_min, h_width)
+                push_spike_to_redis(r,key,up)
+                push_spike_to_redis(r,key,plateu)
+                push_spike_to_redis(r,key,down)
+                print "Spike!",dice,s_barrier,up,plateu,down
+
+
+        if scn.has_key("variation_min") and scn.has_key("variation_max"):
+            min_val = prev_val-(prev_val*0.01)*float(scn["variation_min"])
+            if min_val < s_min:
+                min_val = s_min
+            max_val = prev_val+(prev_val*0.01)*float(scn["variation_max"])
+            if max_val > s_max:
+                max_val = s_max
+        elif scn.has_key("variation_rnd") and scn["variation_rnd"] == 1:
+            min_val = np.random.uniform(float(scn["min"]),float(prev_val))
+            max_val = np.random.uniform(float(prev_val),float(scn["max"]))
+        else:
+            min_val = None
+            max_val = None
+            cur_val = np.random.uniform(float(scn["min"]),float(scn["max"]))
+        if min_val and max_val:
+            cur_val = np.random.uniform(min_val, max_val)
+        cur_val = return_res(scn,cur_val)
+        r.set(key,cur_val)
+        print key,cur_val
+    logger = logging.getLogger("zas_ingestor")
+    while True:
+        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
+        scn = parse_ingestion_scenario(ARGS.ingest_scenario)
+        logger.debug("%d keys are found in ingestion scenario"%len(scn.keys()))
+        for k in scn.keys():
+            ingest_scenario(r,k,scn[k])
+        del r
+        time.sleep(ARGS.ttl)
+
+def ingest():
+    pass
+
+##
 ## Function MAIN()
 ##
 def main():
     global ARGS
     args = ARGS
-
-    import logging
 
     try:
         SCENARIO = ConfigParser.SafeConfigParser()
@@ -246,7 +363,9 @@ def main():
             process.terminate()
             process.join()
     logging.info("All done")
-
+##
+## Stop the daemon
+##
 def stop():
     global ARGS
     args = ARGS
@@ -258,23 +377,23 @@ def stop():
         try:
             pid = int(open(args.pid).read())
         except:
-            print "Can not read PID of the zas_agent"
+            print "Can not read PID of the ZAS"
             sys.exit(0)
         try:
-            print "Terminating zas_agent:",
+            print "Terminating ZAS:",
         except:
             print "can't"
         finally:
             print "ok"
         os.kill(pid, signal.SIGTERM)
         time.sleep(5)
-        print "Killing zas_agent:",
+        print "Killing ZAS:",
         try:
             os.kill(pid, signal.SIGKILL)
         except:
             print "dead already"
     else:
-        print "ZAS Agent isn't running..."
+        print "ZAS isn't running..."
 
 if __name__ == "__main__":
     from daemonize import Daemonize
@@ -283,15 +402,18 @@ if __name__ == "__main__":
     HOST, PORT = "0.0.0.0", 10050
     parser.add_argument('--listen', type=str, default=HOST, help='Listen IP')
     parser.add_argument('--port', type=int, default=PORT, help='Listen Port')
-    parser.add_argument('--scenario', type=file, default=open("/etc/zas_scenario.cfg"), help="Path to scenario file")
+    parser.add_argument('--scenario', type=file, default=open("/etc/zas_scenario.cfg"), help="Path to scenario configuration file")
     parser.add_argument('--redis_host', type=str, default="localhost", help='REDIS IP')
     parser.add_argument('--redis_port', type=int, default=6379, help='REDIS Port')
     parser.add_argument('--start', action='store_true', help="Start simulator")
     parser.add_argument('--stop', action='store_true', help="Stop simulator")
-    parser.add_argument('--ingest', type=str, default="-", help='Ingest data into REDIS for redis: metrics')
-    parser.add_argument('--rq_ingest', type=str, default="-", help='Ingest data into REDIS for rqueue: metrics')
+    parser.add_argument('--ingest', action='store_true', help="Ingest data into REDIS for redis: metrics")
+    parser.add_argument('--rq_ingest', action='store_true', help='Ingest data into REDIS for rqueue: metrics')
+    parser.add_argument('--ingest_file', type=str, default="-", help='Path to the data file')
     parser.add_argument('--rq_cleanup', action='store_true', help='Cleanup data from the rqueue: metrics')
-    parser.add_argument('--rq_ttl', type=int, default=15, help='TTL (Time To Live) for the metrics in rqueue: in seconds')
+    parser.add_argument('--gen_ingest', action='store_true', help='Read \"ingest scenario\" and feed redis: metrics')
+    parser.add_argument('--ingest_scenario', type=str, default="-", help='Path to ingest scenario configuration file')
+    parser.add_argument('--ttl', type=int, default=15, help='TTL (Time To Live) for the metrics (in seconds)')
     parser.add_argument("--log", type=str, default="/tmp/zas_agent.log", help="Name of the log file if agent is daemonized")
     parser.add_argument('--daemonize', action='store_true', help="Daemonize simulator")
     parser.add_argument('--pid', type=str, default="/tmp/zas_agent.pid", help="PID file for simulator process")
@@ -306,7 +428,7 @@ if __name__ == "__main__":
         print "Error occurs:", msg
         parser.print_help()
         sys.exit(0)
-    if not ARGS.stop and ARGS.start:
+    if not ARGS.stop and ARGS.start and not ARGS.gen_ingest:
         if os.path.exists(ARGS.pid):
             print "ZAS Agent is already running ..."
             sys.exit(0)
@@ -320,6 +442,15 @@ if __name__ == "__main__":
         rq_ingest()
     elif ARGS.rq_cleanup:
         rq_cleanup()
+    elif ARGS.gen_ingest and ARGS.start:
+        if os.path.exists(ARGS.pid):
+            print "ZAS Ingestor is already running ..."
+            sys.exit(0)
+        if ARGS.ingest_scenario == "-":
+            print "ZAS Ingestor can not use STDIN for scenario file"
+            sys.exit(0)
+        daemon = Daemonize(app="zas_ingestor", pid=ARGS.pid, action=gen_ingest, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
+        daemon.start()
     else:
         print "You have to specify --start or --stop"
         parser.print_help()
