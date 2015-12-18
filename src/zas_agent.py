@@ -1,3 +1,10 @@
+#!/usr/bin/python
+##
+##
+## Zabbix Passive Agent Simulator: version 0.1
+##
+##
+
 import os
 import sys
 import ConfigParser
@@ -9,14 +16,26 @@ import socket
 ARGS=None
 SCENARIO=None
 
+##
+## def handle(connection, address, scenario, args)
+## agent request handler
+##  - connection: Incoming connection handler
+##  - address: Incoming address
+##  - scenario: Initial simulation scenario
+##  - args: Passed parameters which were passed to the main program
+##
+
+
 def handle(connection, address, scenario, args):
     import logging
 
     ##
-    ## Working with keys
+    ## Working with keys:
+    ## locate_key(scenario, data)
+    ## locate key requested by zabbix_get in the scenario
+    ##  - scenario: current scenario
+    ##  - data: data passed from zabbix_get
     ##
-
-
     def locate_key(scenario, data):
         import fnmatch,re
 
@@ -24,23 +43,22 @@ def handle(connection, address, scenario, args):
         if key in scenario.sections():
             return scenario.get(key, "value")
         else:
-            print scenario.sections()
             for s in scenario.sections():
                 try:
                     patt = scenario.get(s, "match")
                 except:
-                    print "NO",s
-                    continue
-                print "SCAN",s
+                    continues
                 if patt == key or fnmatch.fnmatch(key, patt) or re.match(patt, key) != None:
                     return scenario.get(s, "value")
-                print s,patt,key,re.match(patt, key)
         return None
 
     ##
     ## Generate data
     ##
 
+    ##
+    ## Generating random data within the range val=low,high
+    ##
     def generate_random_uniform(val):
         import numpy as np
         try:
@@ -48,6 +66,12 @@ def handle(connection, address, scenario, args):
             return np.random.uniform(float(low),float(high))
         except:
             return None
+    ##
+    ## Request data from REDIS store
+    ##  - host: Redis IP
+    ##  - port: Redis port
+    ##  - val: data passed from zabbix_agent
+    ##
     def get_data_from_redis(host, port, val):
         import redis
         try:
@@ -57,6 +81,14 @@ def handle(connection, address, scenario, args):
             return res
         except:
             return None
+    ##
+    ## Request data from REDIS store which were stored in the list
+    ## This function requests the last data in the list
+    ## You must apped data to the list with LPUSH
+    ##  - host: Redis IP
+    ##  - port: Redis port
+    ##  - val: data passed from zabbix_agent
+    ##
     def get_data_from_redis_queue(host, port, val):
         import redis
         try:
@@ -67,7 +99,9 @@ def handle(connection, address, scenario, args):
         except KeyboardInterrupt:
             return None
 
-
+    ##
+    ## Handler for the Zabbix protocol V 1
+    ##
     def protocol_v1(scenario, args, data):
         value = locate_key(scenario, data)
         if not value:
@@ -93,7 +127,6 @@ def handle(connection, address, scenario, args):
                 r_key = data
             else:
                 r_key = val
-            print "REDIS",r_key
             res =get_data_from_redis(args.redis_host, args.redis_port, r_key)
             if not res:
                 return None
@@ -103,7 +136,6 @@ def handle(connection, address, scenario, args):
                 r_key = data
             else:
                 r_key = val
-            print "REDIS",r_key
             res =get_data_from_redis_queue(args.redis_host, args.redis_port, r_key)
             if not res:
                 return None
@@ -152,6 +184,9 @@ def handle(connection, address, scenario, args):
         connection.shutdown(socket.SHUT_RDWR)
     sys.exit(0)
 
+##
+## Implementation of the TCP multiprocessing Server
+##
 class Server(object):
     def __init__(self, hostname, port, scenario, _args):
         import logging
@@ -177,7 +212,9 @@ class Server(object):
             self.logger.debug("Started process %r", process)
 
 
-
+##
+## Function MAIN()
+##
 def main():
     global ARGS
     args = ARGS
@@ -251,6 +288,10 @@ if __name__ == "__main__":
     parser.add_argument('--redis_port', type=int, default=6379, help='REDIS Port')
     parser.add_argument('--start', action='store_true', help="Start simulator")
     parser.add_argument('--stop', action='store_true', help="Stop simulator")
+    parser.add_argument('--ingest', type=str, default="-", help='Ingest data into REDIS for redis: metrics')
+    parser.add_argument('--rq_ingest', type=str, default="-", help='Ingest data into REDIS for rqueue: metrics')
+    parser.add_argument('--rq_cleanup', action='store_true', help='Cleanup data from the rqueue: metrics')
+    parser.add_argument('--rq_ttl', type=int, default=15, help='TTL (Time To Live) for the metrics in rqueue: in seconds')
     parser.add_argument("--log", type=str, default="/tmp/zas_agent.log", help="Name of the log file if agent is daemonized")
     parser.add_argument('--daemonize', action='store_true', help="Daemonize simulator")
     parser.add_argument('--pid', type=str, default="/tmp/zas_agent.pid", help="PID file for simulator process")
@@ -265,7 +306,7 @@ if __name__ == "__main__":
         print "Error occurs:", msg
         parser.print_help()
         sys.exit(0)
-    if not ARGS.stop or ARGS.start:
+    if not ARGS.stop and ARGS.start:
         if os.path.exists(ARGS.pid):
             print "ZAS Agent is already running ..."
             sys.exit(0)
@@ -273,6 +314,12 @@ if __name__ == "__main__":
         daemon.start()
     elif ARGS.stop and not ARGS.start:
         stop()
+    elif ARGS.ingest:
+        ingest()
+    elif ARGS.rq_ingest:
+        rq_ingest()
+    elif ARGS.rq_cleanup:
+        rq_cleanup()
     else:
         print "You have to specify --start or --stop"
         parser.print_help()
