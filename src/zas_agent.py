@@ -161,7 +161,7 @@ def handle(connection, address, scenario, args):
             if sig != "ZBXD":
                 _data = connection.recv(1024)
                 data = data+_data
-                print repr(data)
+                ver=10
             else:
                 data = connection.recv(8)
                 p_len = struct.unpack("L", data)[0]
@@ -181,8 +181,9 @@ def handle(connection, address, scenario, args):
             if not r_data:
                 logger.debug("Can not locate value for the key %s in scenario"%data)
                 break
-            hdr="ZBXD"+struct.pack("B",ver)+struct.pack("L",len(r_data)+1)
-            connection.sendall(hdr+r_data+"\n")
+            if ver in [1,10]:
+                hdr="ZBXD"+struct.pack("B",ver)+struct.pack("L",len(r_data)+1)
+                connection.sendall(hdr+r_data+"\n")
             logger.debug("Sent data: %s=%s"%(repr(data),r_data))
     except:
         logger.exception("Problem handling request")
