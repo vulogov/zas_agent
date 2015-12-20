@@ -18,6 +18,76 @@ import logging
 ARGS=None
 SCENARIO=None
 
+
+##
+## Let's ingest single scenario to REDIS
+##
+def ingest_scenario(r, key, scn):
+    import numpy as np
+
+    def push_spike_to_redis(r, key, array):
+        k = "%s.spike"%key
+        for v in array:
+            r.rpush(k,v)
+    def return_res(scn, val):
+        if scn["type"] == "int":
+            return int(val)
+        return val
+
+    s_min = float(scn["min"])
+    s_max = float(scn["max"])
+    if r.llen("%s.spike"%key) > 0:
+        s_val = float(r.lpop("%s.spike"%key))
+        r.set(key,s_val)
+        return return_res(scn,s_val)
+    if scn.has_key("key"):
+        req_key = scn["key"]
+    else:
+        req_key = key
+    prev_val = r.get(req_key)
+    if prev_val == None:
+        prev_val = np.random.uniform(s_min,s_max)
+    else:
+        prev_val = float(prev_val)
+    ##
+    ## Throw the dice if there is a time for a spike
+    ##
+    if scn.has_key("spike_barrier") and scn.has_key("spike_width") and r.llen("%s.spike"%key) == 0:
+        s_barrier = float(scn["spike_barrier"])
+        dice = np.random.uniform(0,100)
+        if s_barrier > dice:
+            ## Spike !
+            spike_max = np.random.uniform(prev_val,s_max)
+            spike_min = np.random.uniform(spike_max, s_min)
+            h_width = int(scn["spike_width"])/2
+            h_plateu = int(np.random.uniform(1,h_width))
+            up = np.linspace(prev_val, spike_max, h_width)
+            plateu = np.random.gamma(spike_max, 0.95,h_plateu)
+            down = np.linspace(spike_max, spike_min, h_width)
+            push_spike_to_redis(r,key,up)
+            push_spike_to_redis(r,key,plateu)
+            push_spike_to_redis(r,key,down)
+            print "Spike!",dice,s_barrier,up,plateu,down
+
+
+    if scn.has_key("variation_min") and scn.has_key("variation_max"):
+        min_val = prev_val-(prev_val*0.01)*float(scn["variation_min"])
+        if min_val < s_min:
+            min_val = s_min
+        max_val = prev_val+(prev_val*0.01)*float(scn["variation_max"])
+        if max_val > s_max:
+            max_val = s_max
+        cur_val = np.random.uniform(min_val, max_val)
+    elif scn.has_key("variation_rnd") and scn["variation_rnd"] == 1:
+        min_val = np.random.uniform(float(scn["min"]),float(prev_val))
+        max_val = np.random.uniform(float(prev_val),float(scn["max"]))
+        cur_val = np.random.uniform(min_val, max_val)
+    else:
+        cur_val = np.random.uniform(float(scn["min"]),float(scn["max"]))
+    cur_val = return_res(scn,cur_val)
+    r.set(key,cur_val)
+    return cur_val
+
 ##
 ## def handle(connection, address, scenario, args)
 ## agent request handler
@@ -51,7 +121,7 @@ def handle(connection, address, scenario, args):
                 except:
                     continue
                 if patt == key or fnmatch.fnmatch(key, patt) or re.match(patt, key) != None:
-                    return scenario.get(s, "value")
+                    return (scenario.get(s, "value"),s)
         return None
 
     ##
@@ -98,14 +168,26 @@ def handle(connection, address, scenario, args):
             res = r.lindex(val, r.llen(val)-1)
             del r
             return res
-        except KeyboardInterrupt:
+        except:
+            return None
+
+    def get_data_from_scenario_execution(host, port, r_key, scn):
+        import redis
+        import simplejson
+
+        try:
+            p_scn = simplejson.loads(scn)
+            r = redis.Redis(host=host, port=port, db=2)
+            res = ingest_scenario(r,r_key,p_scn)
+            return res
+        except:
             return None
 
     ##
     ## Handler for the Zabbix protocol V 1
     ##
     def protocol_v1(scenario, args, data):
-        value = locate_key(scenario, data)
+        value, scn_key = locate_key(scenario, data)
         if not value:
             return None
         ix = value.index(":")
@@ -142,7 +224,16 @@ def handle(connection, address, scenario, args):
             if not res:
                 return None
             return str(res)
-
+        elif v_type == "scenario":
+            if len(val) == 0:
+                r_key = data
+            else:
+                r_key = val
+            try:
+                scn = scenario.get(scn_key, "scenario")
+            except:
+                return None
+            return str(get_data_from_scenario_execution(args.redis_host, args.redis_port, r_key, scn))
         else:
             return None
 
@@ -185,6 +276,7 @@ def handle(connection, address, scenario, args):
                 hdr="ZBXD"+struct.pack("B",1)+struct.pack("L",len(r_data)+1)
                 connection.sendall(hdr+r_data+"\n")
             logger.debug("Sent data: %s=%s"%(repr(data),r_data))
+            break
     except:
         logger.exception("Problem handling request")
     finally:
@@ -261,73 +353,7 @@ def gen_ingest():
             except:
                 continue
         return scn
-    ##
-    ## Let's ingest single scenario
-    ##
-    def ingest_scenario(r, key, scn):
-        import numpy as np
 
-        def push_spike_to_redis(r, key, array):
-            k = "%s.spike"%key
-            for v in array:
-                r.rpush(k,v)
-        def return_res(scn, val):
-            if scn["type"] == "int":
-                return int(val)
-            return val
-
-        s_min = float(scn["min"])
-        s_max = float(scn["max"])
-        if r.llen("%s.spike"%key) > 0:
-            s_val = float(r.lpop("%s.spike"%key))
-            r.set(key,s_val)
-            return return_res(scn,s_val)
-        if scn.has_key("key"):
-            req_key = scn["key"]
-        else:
-            req_key = key
-        prev_val = r.get(req_key)
-        if prev_val == None:
-            prev_val = np.random.uniform(s_min,s_max)
-        else:
-            prev_val = float(prev_val)
-        ##
-        ## Throw the dice if there is a time for a spike
-        ##
-        if scn.has_key("spike_barrier") and scn.has_key("spike_width") and r.llen("%s.spike"%key) == 0:
-            s_barrier = float(scn["spike_barrier"])
-            dice = np.random.uniform(0,100)
-            if s_barrier > dice:
-                ## Spike !
-                spike_max = np.random.uniform(prev_val,s_max)
-                spike_min = np.random.uniform(spike_max, s_min)
-                h_width = int(scn["spike_width"])/2
-                h_plateu = int(np.random.uniform(1,h_width))
-                up = np.linspace(prev_val, spike_max, h_width)
-                plateu = np.random.gamma(spike_max, 0.95,h_plateu)
-                down = np.linspace(spike_max, spike_min, h_width)
-                push_spike_to_redis(r,key,up)
-                push_spike_to_redis(r,key,plateu)
-                push_spike_to_redis(r,key,down)
-                print "Spike!",dice,s_barrier,up,plateu,down
-
-
-        if scn.has_key("variation_min") and scn.has_key("variation_max"):
-            min_val = prev_val-(prev_val*0.01)*float(scn["variation_min"])
-            if min_val < s_min:
-                min_val = s_min
-            max_val = prev_val+(prev_val*0.01)*float(scn["variation_max"])
-            if max_val > s_max:
-                max_val = s_max
-            cur_val = np.random.uniform(min_val, max_val)
-        elif scn.has_key("variation_rnd") and scn["variation_rnd"] == 1:
-            min_val = np.random.uniform(float(scn["min"]),float(prev_val))
-            max_val = np.random.uniform(float(prev_val),float(scn["max"]))
-            cur_val = np.random.uniform(min_val, max_val)
-        else:
-            cur_val = np.random.uniform(float(scn["min"]),float(scn["max"]))
-        cur_val = return_res(scn,cur_val)
-        r.set(key,cur_val)
     logger = logging.getLogger("zas_ingestor")
     while True:
         r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
@@ -358,7 +384,6 @@ def _ingest(ARGS, fun, use_ttl=False):
             continue
         ix = line.index(":")
         ig_key,ig_val = line[:ix],line[ix+1:]
-        print ig_key, ig_val
         fun(ig_key, ig_val)
         if use_ttl:
             time.sleep(int(ARGS.ttl))
