@@ -175,6 +175,9 @@ def handle(connection, address, scenario, args):
             if ver == 1:
                 data = data.strip()
                 r_data = protocol_v1(scenario, args, data)
+            else:
+                data = data.strip()
+                r_data = protocol_v1(scenario, args, data)
             if not r_data:
                 logger.debug("Can not locate value for the key %s in scenario"%data)
                 break
