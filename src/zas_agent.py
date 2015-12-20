@@ -151,7 +151,10 @@ def handle(connection, address, scenario, args):
     try:
         logger.debug("Connected %r at %r", connection, address)
         while True:
-            data = connection.recv(1024)
+            try:
+                data = connection.recv(1024)
+            except:
+                break
             try:
                 hdr = struct.unpack("ssssB", data[:5])
             except:
