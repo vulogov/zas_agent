@@ -164,12 +164,10 @@ def handle(connection, address, scenario, args):
             if sig != "ZBXD":
                 ver=10
             else:
-                print repr(data),repr(data[5:12])
                 p_len = struct.unpack("L", data[5:13])[0]
                 if p_len < 0 and p_len > 1024:
                     logger.debug("Request is too small or too large")
                     break
-                print repr(data[13:])
                 data = data[13:]
             if data == "":
                 logger.debug("Socket closed remotely")
@@ -184,7 +182,7 @@ def handle(connection, address, scenario, args):
                 logger.debug("Can not locate value for the key %s in scenario"%data)
                 break
             if ver in [1,10]:
-                hdr="ZBXD"+struct.pack("B",ver)+struct.pack("L",len(r_data)+1)
+                hdr="ZBXD"+struct.pack("B",1)+struct.pack("L",len(r_data)+1)
                 connection.sendall(hdr+r_data+"\n")
             logger.debug("Sent data: %s=%s"%(repr(data),r_data))
     except:
