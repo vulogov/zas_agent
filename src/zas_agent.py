@@ -159,14 +159,16 @@ def handle(connection, address, scenario, args):
             sig = "".join(list(hdr[:4]))
             ver = list(hdr)[-1]
             if sig != "ZBXD":
-                logger.debug("Zabbix signature not found")
-                break
-            data = connection.recv(8)
-            p_len = struct.unpack("L", data)[0]
-            if p_len < 0 and p_len > 1024:
-                logger.debug("Request is too small or too large")
-                break
-            data = connection.recv(p_len)
+                _data = connection.recv(1024)
+                data = data+_data
+                print repr(data)
+            else:
+                data = connection.recv(8)
+                p_len = struct.unpack("L", data)[0]
+                if p_len < 0 and p_len > 1024:
+                    logger.debug("Request is too small or too large")
+                    break
+                data = connection.recv(p_len)
             if data == "":
                 logger.debug("Socket closed remotely")
                 break
