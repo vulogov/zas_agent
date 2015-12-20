@@ -310,15 +310,13 @@ def gen_ingest():
             max_val = prev_val+(prev_val*0.01)*float(scn["variation_max"])
             if max_val > s_max:
                 max_val = s_max
+            cur_val = np.random.uniform(min_val, max_val)
         elif scn.has_key("variation_rnd") and scn["variation_rnd"] == 1:
             min_val = np.random.uniform(float(scn["min"]),float(prev_val))
             max_val = np.random.uniform(float(prev_val),float(scn["max"]))
-        else:
-            min_val = None
-            max_val = None
-            cur_val = np.random.uniform(float(scn["min"]),float(scn["max"]))
-        if min_val and max_val:
             cur_val = np.random.uniform(min_val, max_val)
+        else:
+            cur_val = np.random.uniform(float(scn["min"]),float(scn["max"]))
         cur_val = return_res(scn,cur_val)
         r.set(key,cur_val)
     logger = logging.getLogger("zas_ingestor")
