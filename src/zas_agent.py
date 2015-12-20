@@ -49,7 +49,7 @@ def handle(connection, address, scenario, args):
                 try:
                     patt = scenario.get(s, "match")
                 except:
-                    continues
+                    continue
                 if patt == key or fnmatch.fnmatch(key, patt) or re.match(patt, key) != None:
                     return scenario.get(s, "value")
         return None
@@ -151,24 +151,23 @@ def handle(connection, address, scenario, args):
     try:
         logger.debug("Connected %r at %r", connection, address)
         while True:
-            data = connection.recv(5)
+            data = connection.recv(1024)
             try:
-                hdr = struct.unpack("ssssB", data)
+                hdr = struct.unpack("ssssB", data[:5])
             except:
                 break
             sig = "".join(list(hdr[:4]))
             ver = list(hdr)[-1]
             if sig != "ZBXD":
-                _data = connection.recv(1024)
-                data = data+_data
                 ver=10
             else:
-                data = connection.recv(8)
-                p_len = struct.unpack("L", data)[0]
+                print repr(data),repr(data[5:12])
+                p_len = struct.unpack("L", data[5:13])[0]
                 if p_len < 0 and p_len > 1024:
                     logger.debug("Request is too small or too large")
                     break
-                data = connection.recv(p_len)
+                print repr(data[13:])
+                data = data[13:]
             if data == "":
                 logger.debug("Socket closed remotely")
                 break
@@ -190,7 +189,7 @@ def handle(connection, address, scenario, args):
     finally:
         logger.debug("Closing socket")
         try:
-            connection.shutdown(socket.SHUT_RDWR)
+            connection.close()
         except:
             pass
     sys.exit(0)
