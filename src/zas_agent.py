@@ -189,7 +189,10 @@ def handle(connection, address, scenario, args):
         logger.exception("Problem handling request")
     finally:
         logger.debug("Closing socket")
-        connection.shutdown(socket.SHUT_RDWR)
+        try:
+            connection.shutdown(socket.SHUT_RDWR)
+        except:
+            pass
     sys.exit(0)
 
 ##
