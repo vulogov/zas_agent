@@ -273,7 +273,11 @@ def gen_ingest():
             s_val = float(r.lpop("%s.spike"%key))
             r.set(key,s_val)
             return return_res(scn,s_val)
-        prev_val = r.get(key)
+        if scn.has_key("key"):
+            req_key = scn["key"]
+        else:
+            req_key = key
+        prev_val = r.get(req_key)
         if prev_val == None:
             prev_val = np.random.uniform(s_min,s_max)
         else:
@@ -317,7 +321,6 @@ def gen_ingest():
             cur_val = np.random.uniform(min_val, max_val)
         cur_val = return_res(scn,cur_val)
         r.set(key,cur_val)
-        print key,cur_val
     logger = logging.getLogger("zas_ingestor")
     while True:
         r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
@@ -328,8 +331,65 @@ def gen_ingest():
         del r
         time.sleep(ARGS.ttl)
 
-def ingest():
-    pass
+##
+## Fill the REDIS with stuff from files
+##
+def _ingest(ARGS, fun, use_ttl=False):
+    if ARGS.ingest_file != "-" and os.path.exists(ARGS.ingest_file):
+        f = open(ARGS.ingest_file)
+    elif ARGS.ingest_file == "-":
+        f = sys.stdin
+    else:
+        print "Ingest data file %s not found"%ARGS.ingest_file
+        sys.exit()
+    while True:
+        line = f.readline().strip()
+        if len(line) == 0:
+            f.close()
+            break
+        if line[0] in ["#",";"]:
+            continue
+        ix = line.index(":")
+        ig_key,ig_val = line[:ix],line[ix+1:]
+        print ig_key, ig_val
+        fun(ig_key, ig_val)
+        if use_ttl:
+            time.sleep(int(ARGS.ttl))
+##
+## Ingest to redis:
+##
+def ingest(ARGS):
+    import redis
+
+    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
+    _ingest(ARGS, r.set)
+    del r
+    sys.exit(0)
+##
+## Ingest to rqueue:
+##
+def rq_ingest(ARGS):
+    import redis
+
+    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=1)
+    _ingest(ARGS, r.lpush, True)
+    del r
+    sys.exit(0)
+
+##
+## Clean-up rqueue:
+##
+def rq_cleanup(ARGS):
+    import redis
+
+    while True:
+        time.sleep(int(ARGS.ttl))
+        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=1)
+        for key in r.keys():
+            if (r.llen(key) == 1 and ARGS.rq_cleanup_full) or r.llen(key) > 1:
+                r.rpop(key)
+                time.sleep(int(ARGS.ttl))
+        del r
 
 ##
 ## Function MAIN()
@@ -414,6 +474,7 @@ if __name__ == "__main__":
     parser.add_argument('--gen_ingest', action='store_true', help='Read \"ingest scenario\" and feed redis: metrics')
     parser.add_argument('--ingest_scenario', type=str, default="-", help='Path to ingest scenario configuration file')
     parser.add_argument('--ttl', type=int, default=15, help='TTL (Time To Live) for the metrics (in seconds)')
+    parser.add_argument('--rq_cleanup_full', action='store_true', help="Clean up queues to empty state")
     parser.add_argument("--log", type=str, default="/tmp/zas_agent.log", help="Name of the log file if agent is daemonized")
     parser.add_argument('--daemonize', action='store_true', help="Daemonize simulator")
     parser.add_argument('--pid', type=str, default="/tmp/zas_agent.pid", help="PID file for simulator process")
@@ -437,11 +498,11 @@ if __name__ == "__main__":
     elif ARGS.stop and not ARGS.start:
         stop()
     elif ARGS.ingest:
-        ingest()
+        ingest(ARGS)
     elif ARGS.rq_ingest:
-        rq_ingest()
+        rq_ingest(ARGS)
     elif ARGS.rq_cleanup:
-        rq_cleanup()
+        rq_cleanup(ARGS)
     elif ARGS.gen_ingest and ARGS.start:
         if os.path.exists(ARGS.pid):
             print "ZAS Ingestor is already running ..."
