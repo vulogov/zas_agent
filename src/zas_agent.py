@@ -113,7 +113,7 @@ def handle(connection, address, scenario, args):
 
         key = data.strip()
         if key in scenario.sections():
-            return scenario.get(key, "value")
+            return (scenario.get(key, "value"),key)
         else:
             for s in scenario.sections():
                 try:
