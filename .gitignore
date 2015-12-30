@@ -10,3 +10,5 @@
 .idea/workspace.xml
 
 .idea/zas_agent.iml
+
+build/scripts-2.6/zas_agent.py
