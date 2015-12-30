@@ -12,3 +12,23 @@
 .idea/zas_agent.iml
 
 build/scripts-2.6/zas_agent.py
+
+UNKNOWN.egg-info/top_level.txt
+
+*.egg
+
+UNKNOWN.egg-info/dependency_links.txt
+
+UNKNOWN.egg-info/PKG-INFO
+
+UNKNOWN.egg-info/SOURCES.txt
+
+zas_agent.egg-info/dependency_links.txt
+
+zas_agent.egg-info/PKG-INFO
+
+zas_agent.egg-info/requires.txt
+
+zas_agent.egg-info/SOURCES.txt
+
+zas_agent.egg-info/top_level.txt
