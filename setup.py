@@ -15,7 +15,8 @@ setup(
     scripts=['src/zas_agent.py',],
     data_files=[
         ("/etc/zas", ['etc/network.scenario'],),
-        ("/etc", ["etc/zas_scenario.cfg"])
+        ("/etc", ["etc/zas_scenario.cfg"]),
+        ("/usr/share/zas_agent", ["doc/zas-agent.0.1.1.pdf",])
     ],
     install_requires=[
         "daemonize >= 2.4.2",
