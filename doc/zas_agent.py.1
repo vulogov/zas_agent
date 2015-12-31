@@ -11,6 +11,7 @@ zas_agent.py - Zabbix Agent Simulator main program.
 .B --rq_ingest
 .B --rq_cleanup
 .B --ingest_scenario
+.B --gen_ingest
 .B --ttl
 .B --rq_cleanup_full
 .B --log
@@ -43,6 +44,8 @@ Send data to rqueue: queues
 Cleanup rqueue: queues
 .IP --ingest_scenario
 Path to the file, containing scenario for the --ingest or --rq_ingest
+.IP --gen_ingest
+Ingest scenario into redis: metrics
 .IP --ttl
 "Time-to-live" for the values in redis: or rqueue: in seconds
 .IP --rq_cleanup_full
