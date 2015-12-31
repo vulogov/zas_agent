@@ -1,0 +1,79 @@
+.TH zas_agent.py 1 "Dec 2015" "Version 0.1.1"
+.SH NAME
+zas_agent.py - Zabbix Agent Simulator main program.
+.SH SYNOPSIS
+.B [ --listen --port --scenario
+.B --redis_host
+.B --redis_port
+.B --start
+.B --stop
+.B --ingest
+.B --rq_ingest
+.B --rq_cleanup
+.B --ingest_scenario
+.B --ttl
+.B --rq_cleanup_full
+.B --log
+.B --daemonize
+.B --user
+.B --group
+.B ]
+
+.SH OPTIONS
+
+.IP --listen
+Listen IP
+.IP --port
+Listen port #
+.IP --scenario
+Path to the configuration file.
+.IP --redis_host
+Redis IP
+.IP --redis_port
+Redis port #
+.IP --start
+Start ZAS Agent
+.IP--stop
+Stop ZAS Agent
+.IP --ingest
+Send data to redis: metrics
+.IP --rq_ingest
+Send data to rqueue: queues
+.IP --rq_cleanup
+Cleanup rqueue: queues
+.IP --ingest_scenario
+Path to the file, containing scenario for the --ingest or --rq_ingest
+.IP --ttl
+"Time-to-live" for the values in redis: or rqueue: in seconds
+.IP --rq_cleanup_full
+If specified, zabbix_agent.py with --rq_cleanup will remove the last entry in the queue when the time comes
+.IP --log
+Path to the log file
+.IP --daemonize
+Daemonize application
+.IP --user
+Switch to the specific user
+.IP --group
+Switch to the specific group
+
+.SH EXAMPLES
+
+.PP
+.B Start ZAS agent daemon
+.PP
+zas_agent.py --start --daemonize
+.PP
+.B Stop ZAS agent daemon
+.PP
+zas_agent.py --stop
+.PP
+.B Ingest scenario and populate redis: values
+.PP
+zas_agent.py --ingest --ingest_scenario /etc/zas/network.scenario --ttl 10
+.PP
+.B Populate rqueue: queues as background service
+.PP
+zas_agent.py --rq_ingest --ingest_scenario /etc/zas/network.scenario --ttl 10 --daemonize --pid /tmp/network.scenario.pid
+.PP
+
+
