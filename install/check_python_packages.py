@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-PKGS=['os','sys','ConfigParser','argparse','struct','multiprocessing','socket','time','logging','redis','numpy','fnmatch','re','signal','daemonize']
+PKGS=['os','sys','ConfigParser','argparse','struct','multiprocessing','socket','time','logging','redis','numpy','fnmatch','re','signal','daemonize','simplejson']
 
 for p in PKGS:
     import imp
