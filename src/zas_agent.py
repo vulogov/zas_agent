@@ -122,7 +122,7 @@ def handle(connection, address, scenario, args):
                     continue
                 if patt == key or fnmatch.fnmatch(key, patt) or re.match(patt, key) != None:
                     return (scenario.get(s, "value"),s)
-        return None
+        return (None,None)
 
     ##
     ## Generate data
@@ -188,7 +188,7 @@ def handle(connection, address, scenario, args):
     ##
     def protocol_v1(scenario, args, data):
         value, scn_key = locate_key(scenario, data)
-        if not value:
+        if not value or not scn_key:
             return None
         ix = value.index(":")
         v_type, val = value[:ix],value[ix+1:].strip()
