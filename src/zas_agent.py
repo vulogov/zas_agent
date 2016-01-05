@@ -302,10 +302,13 @@ class Server(object):
     def start(self):
         global SCENARIO
         self.logger.debug("listening")
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.bind((self.hostname, self.port))
-        self.socket.listen(1)
-
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.bind((self.hostname, self.port))
+            self.socket.listen(socket.SOMAXCONN)
+        except:
+            self.logger.debug("Can not bind to %s:%d"%(self.hostname, self.port))
+            sys.exit(0)
         while True:
             conn, address = self.socket.accept()
             self.logger.debug("Got connection")
