@@ -144,10 +144,10 @@ def handle(connection, address, scenario, args):
     ##  - port: Redis port
     ##  - val: data passed from zabbix_agent
     ##
-    def get_data_from_redis(host, port, val):
+    def get_data_from_redis(host, port, val, r_shift=0):
         import redis
         try:
-            r = redis.Redis(host=host, port=port, db=0)
+            r = redis.Redis(host=host, port=port, db=r_shift)
             res = r.get(val)
             del r
             return res
@@ -161,23 +161,23 @@ def handle(connection, address, scenario, args):
     ##  - port: Redis port
     ##  - val: data passed from zabbix_agent
     ##
-    def get_data_from_redis_queue(host, port, val):
+    def get_data_from_redis_queue(host, port, val, r_shift=0):
         import redis
         try:
-            r = redis.Redis(host=host, port=port, db=1)
+            r = redis.Redis(host=host, port=port, db=r_shift=1)
             res = r.lindex(val, r.llen(val)-1)
             del r
             return res
         except:
             return None
 
-    def get_data_from_scenario_execution(host, port, r_key, scn):
+    def get_data_from_scenario_execution(host, port, r_key, scn, r_shift=0):
         import redis
         import simplejson
 
         try:
             p_scn = simplejson.loads(scn)
-            r = redis.Redis(host=host, port=port, db=2)
+            r = redis.Redis(host=host, port=port, db=r_shift+2)
             res = ingest_scenario(r,r_key,p_scn)
             return res
         except:
@@ -211,7 +211,7 @@ def handle(connection, address, scenario, args):
                 r_key = data
             else:
                 r_key = val
-            res =get_data_from_redis(args.redis_host, args.redis_port, r_key)
+            res =get_data_from_redis(args.redis_host, args.redis_port, r_key, args.redis_db_shift)
             if not res:
                 return None
             return str(res)
@@ -220,7 +220,7 @@ def handle(connection, address, scenario, args):
                 r_key = data
             else:
                 r_key = val
-            res =get_data_from_redis_queue(args.redis_host, args.redis_port, r_key)
+            res =get_data_from_redis_queue(args.redis_host, args.redis_port, r_key, args.redis_db_shift)
             if not res:
                 return None
             return str(res)
@@ -233,7 +233,7 @@ def handle(connection, address, scenario, args):
                 scn = scenario.get(scn_key, "scenario")
             except:
                 return None
-            return str(get_data_from_scenario_execution(args.redis_host, args.redis_port, r_key, scn))
+            return str(get_data_from_scenario_execution(args.redis_host, args.redis_port, r_key, scn, args.redis_db_shift))
         else:
             return None
 
@@ -359,7 +359,7 @@ def gen_ingest():
 
     logger = logging.getLogger("zas_ingestor")
     while True:
-        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
+        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=ARGS.redis_db_shift)
         scn = parse_ingestion_scenario(ARGS.ingest_scenario)
         logger.debug("%d keys are found in ingestion scenario"%len(scn.keys()))
         for k in scn.keys():
@@ -396,7 +396,7 @@ def _ingest(ARGS, fun, use_ttl=False):
 def ingest(ARGS):
     import redis
 
-    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=0)
+    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=ARGS.redis_db_shift)
     _ingest(ARGS, r.set)
     del r
     sys.exit(0)
@@ -406,7 +406,7 @@ def ingest(ARGS):
 def rq_ingest(ARGS):
     import redis
 
-    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=1)
+    r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=ARGS.redis_db_shift+1)
     _ingest(ARGS, r.lpush, True)
     del r
     sys.exit(0)
@@ -419,7 +419,7 @@ def rq_cleanup(ARGS):
 
     while True:
         time.sleep(int(ARGS.ttl))
-        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=1)
+        r = redis.Redis(host=ARGS.redis_host, port=ARGS.redis_port, db=ARGS.redis_db_shift+1)
         for key in r.keys():
             if (r.llen(key) == 1 and ARGS.rq_cleanup_full) or r.llen(key) > 1:
                 r.rpop(key)
@@ -510,6 +510,7 @@ if __name__ == "__main__":
     parser.add_argument('--scenario', type=str, default="/etc/zas_scenario.cfg", help="Path to scenario configuration file")
     parser.add_argument('--redis_host', type=str, default="localhost", help='REDIS IP')
     parser.add_argument('--redis_port', type=int, default=6379, help='REDIS Port')
+    parser.add_argument('--redis_db_shift', type=int, default=0, help='Shift for the REDIS database numbers')
     parser.add_argument('--start', action='store_true', help="Start simulator")
     parser.add_argument('--stop', action='store_true', help="Stop simulator")
     parser.add_argument('--ingest', action='store_true', help="Ingest data into REDIS for redis: metrics")
