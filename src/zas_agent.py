@@ -426,6 +426,14 @@ def rq_cleanup(ARGS):
                 time.sleep(int(ARGS.ttl))
         del r
 
+def trace(msg=None):
+    import traceback
+    f=open("/tmp/zas_trace.txt","a")
+    if msg:
+        f.write(msg+"\n")
+    else:
+        traceback.print_exc(file=f)
+    f.close()
 ##
 ## Function MAIN()
 ##
@@ -433,18 +441,20 @@ def main():
     global ARGS
     args = ARGS
 
-    try:
-        SCENARIO = ConfigParser.SafeConfigParser()
-        SCENARIO.readfp(args.scenario)
-    except KeyboardInterrupt:
-        print "Can not parse scenario file"
-        sys.exit(0)
-
     if args.daemonize:
         logging.basicConfig(filename=args.log,level=logging.DEBUG)
     else:
         logging.basicConfig(level=logging.DEBUG)
-
+    if not os.access(args.scenario, os.R_OK):
+        logging.info("Configuration file %s not readable"%args.scenario)
+        sys.exit(0)
+    logging.info("Reading configuration file %s"%args.scenario)
+    try:
+        SCENARIO = ConfigParser.SafeConfigParser()
+        SCENARIO.readfp(open(args.scenario))
+    except:
+        print "Can not parse scenario file"
+        sys.exit(0)
     server = Server(args.listen, args.port, SCENARIO, args)
     try:
         logging.info("Listening %s:%d"%(args.listen, args.port))
@@ -497,7 +507,7 @@ if __name__ == "__main__":
     HOST, PORT = "0.0.0.0", 10050
     parser.add_argument('--listen', type=str, default=HOST, help='Listen IP')
     parser.add_argument('--port', type=int, default=PORT, help='Listen Port')
-    parser.add_argument('--scenario', type=file, default=open("/etc/zas_scenario.cfg"), help="Path to scenario configuration file")
+    parser.add_argument('--scenario', type=str, default="/etc/zas_scenario.cfg", help="Path to scenario configuration file")
     parser.add_argument('--redis_host', type=str, default="localhost", help='REDIS IP')
     parser.add_argument('--redis_port', type=int, default=6379, help='REDIS Port')
     parser.add_argument('--start', action='store_true', help="Start simulator")
@@ -525,11 +535,31 @@ if __name__ == "__main__":
         parser.print_help()
         sys.exit(0)
     if not ARGS.stop and ARGS.start and not ARGS.gen_ingest:
+        if not os.path.exists(ARGS.scenario) or not os.path.isfile(ARGS.scenario):
+            print "Configuration file %s not exists or it is not a file"%ARGS.scenario
+            sys.exit(0)
         if os.path.exists(ARGS.pid):
             print "ZAS Agent is already running ..."
             sys.exit(0)
-        daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
-        daemon.start()
+        if ARGS.daemonize:
+            print "Daemonizing ZAS:",
+        try:
+            daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
+            daemon.start()
+        except SystemExit:
+            pass
+        except:
+            if ARGS.daemonize:
+                print "fail"
+                import traceback
+                print '-'*60
+                traceback.print_exc(file=sys.stdout)
+                print '-'*60
+                sys.stdout.flush()
+                sys.exit(0)
+        finally:
+            if ARGS.daemonize:
+                print "ok"
     elif ARGS.stop and not ARGS.start:
         stop()
     elif ARGS.ingest:
