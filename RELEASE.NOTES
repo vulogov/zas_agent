@@ -1,0 +1,12 @@
+================================================================
+v0.1.3
+
+Added support of the use of the single REDIS server with
+multiple instances of the ZAS agents. For that, you now can use
+option parameter --redis_db_shift. The default value is "0". The
+number passed with this option will be used as a shift to calculate
+REDIS db number. Example of use of this feature
+
+zas_agent.py --start --redis_host 1.1.1.1 --redis_db_shift=0 --listen=1.1.2.1 --pid=/tmp/za1.pid
+zas_agent.py --start --redis_host 1.1.1.1 --redis_db_shift=10 --listen=1.1.2.2 --pid=/tmp/za2.pid
+zas_agent.py --start --redis_host 1.1.1.1 --redis_db_shift=20 --listen=1.1.2.3 --pid=/tmp/za3.pid
