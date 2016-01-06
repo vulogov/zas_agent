@@ -1,0 +1,12 @@
+In this file, I will list the projects, which benefits from
+the use of the zas_agent.
+
+1. Zabbix-Grafona integration
+
+URL:
+
+http://play.grafana-zabbix.org/
+
+DEMO:
+
+http://play.grafana-zabbix.org/dashboard/db/template-linux-server
