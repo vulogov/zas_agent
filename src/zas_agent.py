@@ -89,6 +89,26 @@ def ingest_scenario(r, key, scn):
     return cur_val
 
 ##
+## def proxy_handle(connection, address, scenario, args)
+## agent request handler
+##  - connection: Incoming connection handler
+##  - address: Incoming address
+##  - scenario: Initial simulation scenario
+##  - args: Passed parameters which were passed to the main program
+##
+def proxy_handle(connection, address, scenario, args):
+    try:
+        logger.debug("Connected %r at %r", connection, address)
+    except:
+        logger.exception("Problem handling request")
+    finally:
+        logger.debug("Closing socket")
+        try:
+            connection.close()
+        except:
+            pass
+    sys.exit(0)
+##
 ## def handle(connection, address, scenario, args)
 ## agent request handler
 ##  - connection: Incoming connection handler
@@ -291,7 +311,7 @@ def handle(connection, address, scenario, args):
 ## Implementation of the TCP multiprocessing Server
 ##
 class Server(object):
-    def __init__(self, hostname, port, scenario, _args):
+    def __init__(self, hostname, port, scenario, _handler, _args):
         import logging
         self.logger = logging.getLogger("zas_server")
         self.hostname = hostname
@@ -312,7 +332,7 @@ class Server(object):
         while True:
             conn, address = self.socket.accept()
             self.logger.debug("Got connection")
-            process = multiprocessing.Process(target=handle, args=(conn, address, self.scenario, self.args))
+            process = multiprocessing.Process(target=_handler, args=(conn, address, self.scenario, self.args))
             process.daemon = True
             process.start()
             self.logger.debug("Started process %r", process)
@@ -437,7 +457,7 @@ def trace(msg=None):
 ##
 ## Function MAIN()
 ##
-def main():
+def _main(handler, tcp_handler):
     global ARGS
     args = ARGS
 
@@ -455,7 +475,7 @@ def main():
     except:
         print "Can not parse scenario file"
         sys.exit(0)
-    server = Server(args.listen, args.port, SCENARIO, args)
+    server = handler(args.listen, args.port, SCENARIO, tcp_handler, args)
     try:
         logging.info("Listening %s:%d"%(args.listen, args.port))
         server.start()
@@ -468,6 +488,20 @@ def main():
             process.terminate()
             process.join()
     logging.info("All done")
+
+##
+## ZAS agent main()
+##
+def main():
+    return _main(Server, handle)
+
+##
+## Function proxy_main(). Starting the Zabbix Proxy simulator
+##
+
+def proxy_main():
+    return _main(Server, proxy_handle)
+
 ##
 ## Stop the daemon
 ##
@@ -512,6 +546,7 @@ if __name__ == "__main__":
     parser.add_argument('--redis_port', type=int, default=6379, help='REDIS Port')
     parser.add_argument('--start', action='store_true', help="Start simulator")
     parser.add_argument('--stop', action='store_true', help="Stop simulator")
+    parser.add_argument('--proxy_start', action='store_true', help="Start proxy simulator")
     parser.add_argument('--ingest', action='store_true', help="Ingest data into REDIS for redis: metrics")
     parser.add_argument('--rq_ingest', action='store_true', help='Ingest data into REDIS for rqueue: metrics')
     parser.add_argument('--ingest_file', type=str, default="-", help='Path to the data file')
@@ -534,17 +569,22 @@ if __name__ == "__main__":
         print "Error occurs:", msg
         parser.print_help()
         sys.exit(0)
-    if not ARGS.stop and ARGS.start and not ARGS.gen_ingest:
+    if not ARGS.stop and (ARGS.start or ARGS.proxy_start) and not ARGS.gen_ingest:
         if not os.path.exists(ARGS.scenario) or not os.path.isfile(ARGS.scenario):
             print "Configuration file %s not exists or it is not a file"%ARGS.scenario
             sys.exit(0)
         if os.path.exists(ARGS.pid):
-            print "ZAS Agent is already running ..."
+            print "ZAS is already running ..."
             sys.exit(0)
         if ARGS.daemonize:
             print "Daemonizing ZAS:",
         try:
-            daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
+            if ARGS.start:
+                daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
+            elif ARGS.proxy_start:
+                daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=proxy_main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
+            else:
+                daemon = Daemonize(app="zas_agent", pid=ARGS.pid, action=main, foreground=not ARGS.daemonize, user=ARGS.user, group=ARGS.group)
             daemon.start()
         except SystemExit:
             pass
