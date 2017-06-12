@@ -14,6 +14,7 @@ import multiprocessing
 import socket
 import time
 import logging
+import subprocess
 
 ARGS=None
 SCENARIO=None
@@ -195,6 +196,10 @@ def handle(connection, address, scenario, args):
         v_type = v_type.lower()
         if v_type == "static":
             return str(val)
+        elif v_type == "cmd":
+            call_args = val.split(',')
+            res = subprocess.Popen(call_args, stdout=subprocess.PIPE).stdout.read()
+            return res.strip()
         elif v_type == "uniform_int":
             res = generate_random_uniform(val)
             if not res:
