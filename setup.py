@@ -20,8 +20,8 @@ setup(
         ("/usr/share/man/man1", ["doc/zas_agent.py.1",])
     ],
     install_requires=[
-        "daemonize >= 2.4.2",
-        "numpy >= 1.4.1",
+        "daemonize == 2.4.2",
+        "numpy == 1.16.5",
         "redis >= 2.0.0",
         "simplejson >= 2.0.9"
     ]
