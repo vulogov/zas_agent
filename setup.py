@@ -11,7 +11,7 @@ setup(
     license="GNU GPLv3",
     description="zas_agent",
     long_description="Zabbix Agent Simulator",
-    version="0.1.1",
+    version="0.1.2",
     scripts=['src/zas_agent.py',],
     data_files=[
         ("/etc/zas", ['etc/network.scenario'],),
